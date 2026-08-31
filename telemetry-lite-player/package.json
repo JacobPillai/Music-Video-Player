@@ -1,0 +1,43 @@
+{
+  "name": "lightweight-music-player",
+  "version": "0.1.0",
+  "description": "A lightweight desktop music player with basic automations, built with Electron + Vue 3",
+  "main": "src/main/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "electron": "electron .",
+    "start": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dist": "vite build && electron-builder"
+  },
+  "dependencies": {
+    "electron-store": "^8.2.0",
+    "music-metadata": "^7.14.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "bootstrap": "^5.3.3",
+    "bootstrap-vue-next": "^0.16.4",
+    "concurrently": "^8.2.2",
+    "electron": "^30.0.1",
+    "electron-builder": "^24.13.3",
+    "vite": "^5.2.8",
+    "vue": "^3.4.21",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.jacob.musicplayer",
+    "productName": "LightPlayer",
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "src/preload/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": { "target": "dmg" },
+    "win": { "target": "nsis" },
+    "linux": { "target": "AppImage" }
+  }
+}
