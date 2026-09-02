@@ -125,9 +125,7 @@ function seek(event) {
 }
 
 function setVolume(event) {
-  const value = Number(event.target.value);
-  player.setVolume(value);
-  if (audioEl.value) audioEl.value.volume = player.volume.value;
+  player.setVolume(Number(event.target.value));
 }
 
 function onTimeUpdate() {
