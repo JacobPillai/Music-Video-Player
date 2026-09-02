@@ -4,12 +4,8 @@ export function createAutomationEngine({ player, getPlaylists = () => [] } = {})
   let rules = [];
   let lastScheduleKey = null;
 
-  function normalizeRules(value) {
-    return Array.isArray(value) ? value : [];
-  }
-
   function setRules(value) {
-    rules = normalizeRules(value);
+    rules = Array.isArray(value) ? value : [];
   }
 
   function executeAction(rule) {
@@ -25,9 +21,7 @@ export function createAutomationEngine({ player, getPlaylists = () => [] } = {})
         return true;
       case 'playPlaylist': {
         const playlists = getPlaylists();
-        const playlist = playlists.find((item) =>
-          item?.id === rule.playlistId || item?.name === rule.playlistName
-        );
+        const playlist = playlists.find((item) => item?.id === rule.playlistId);
         const firstTrack = playlist?.tracks?.[0];
         if (!firstTrack) return false;
         player.selectTrack(firstTrack, { autoplay: true });
@@ -39,14 +33,14 @@ export function createAutomationEngine({ player, getPlaylists = () => [] } = {})
   }
 
   function handleSystemEvent(eventName) {
-    const matching = rules.filter(
-      (rule) =>
-        rule.enabled !== false &&
-        rule.triggerType === 'system' &&
-        rule.systemEvent === eventName
-    );
-
-    matching.forEach(executeAction);
+    rules
+      .filter(
+        (rule) =>
+          rule.enabled !== false &&
+          rule.triggerType === 'system' &&
+          rule.systemEvent === eventName
+      )
+      .forEach(executeAction);
   }
 
   function getCurrentScheduleKey(date = new Date()) {
