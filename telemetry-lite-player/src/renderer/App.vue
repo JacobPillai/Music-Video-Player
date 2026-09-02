@@ -55,7 +55,7 @@ const tracks = ref([]);
 const playlists = ref([]);
 
 const currentIndex = computed(() =>
-  player.track ? tracks.value.findIndex((t) => t.id === player.track.id) : -1
+  player.track.value ? tracks.value.findIndex((t) => t.id === player.track.value.id) : -1
 );
 
 async function pickFolder() {
@@ -63,7 +63,7 @@ async function pickFolder() {
   if (!result) return;
 
   tracks.value = result.tracks;
-  if (player.track && !tracks.value.some((t) => t.id === player.track.id)) {
+  if (player.track.value && !tracks.value.some((t) => t.id === player.track.value.id)) {
     player.selectTrack(null, { autoplay: false });
   }
 }
@@ -73,7 +73,7 @@ function playTrack(track) {
 }
 
 function playNext() {
-  if (!player.track || tracks.value.length === 0 || currentIndex.value < 0) return;
+  if (!player.track.value || tracks.value.length === 0 || currentIndex.value < 0) return;
 
   let nextIndex;
   if (player.shuffle.value && tracks.value.length > 1) {
@@ -98,7 +98,7 @@ function playNext() {
 }
 
 function playPrev() {
-  if (!player.track || tracks.value.length === 0 || currentIndex.value < 0) return;
+  if (!player.track.value || tracks.value.length === 0 || currentIndex.value < 0) return;
 
   if (player.currentTime.value > 3) {
     player.seekTo(0);
