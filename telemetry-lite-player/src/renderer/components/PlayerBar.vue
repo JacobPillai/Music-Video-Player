@@ -14,7 +14,7 @@
         min="0"
         :max="player.duration.value || 0"
         step="0.1"
-        v-model.number="player.currentTime.value"
+        :value="player.currentTime.value"
         @input="seek"
       />
       <span>{{ formatTime(player.duration.value) }}</span>
@@ -27,7 +27,7 @@
         {{ player.isPlaying.value ? '⏸' : '▶️' }}
       </button>
       <button @click="$emit('next')" title="Next">⏭</button>
-      <button @click="player.cycleRepeat()" :style="{ opacity: player.repeatMode.value !== 'off' ? 1 : 0.4 }" title="Repeat">
+      <button @click="player.cycleRepeat()" :style="{ opacity: player.repeatMode.value !== 'off' ? 1 : 0.4 }" :title="`Repeat: ${player.repeatMode.value}`">
         {{ player.repeatMode.value === 'one' ? '🔂' : '🔁' }}
       </button>
     </div>
@@ -41,7 +41,8 @@
         min="0"
         max="1"
         step="0.01"
-        v-model.number="player.volume.value"
+        :value="player.volume.value"
+        @input="setVolume"
       />
     </div>
 
@@ -59,7 +60,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, nextTick } from 'vue';
+import { ref, watch, onMounted, nextTick, onBeforeUnmount } from 'vue';
 import { usePlayerStore } from '../stores/playerStore';
 
 const props = defineProps({
@@ -69,15 +70,32 @@ const props = defineProps({
 const emit = defineEmits(['next', 'prev']);
 const player = usePlayerStore();
 const audioEl = ref(null);
+let commandWatcherStop;
 
-function toFileUrl(path) {
-  const normalized = path.replace(/\\/g, '/');
-  return `file://${normalized.startsWith('/') ? '' : '/'}${normalized}`;
+function toFileUrl(filePath) {
+  if (!filePath) return '';
+  const normalized = String(filePath).replace(/\\/g, '/');
+  const pathPart = normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)
+    ? normalized
+    : `/${normalized}`;
+  return `file://${encodeURI(pathPart)}`;
 }
 
-function togglePlay() {
-  if (!audioEl.value || !props.track) return;
-  player.togglePlay();
+async function togglePlay() {
+  const audio = audioEl.value;
+  if (!audio || !props.track) return;
+
+  if (!audio.paused) {
+    audio.pause();
+    return;
+  }
+
+  try {
+    await audio.play();
+  } catch (error) {
+    console.error('Unable to start playback:', error);
+    player.setPlaying(false);
+  }
 }
 
 async function applyPlaybackState() {
@@ -93,13 +111,23 @@ async function applyPlaybackState() {
       console.error('Unable to start playback:', error);
       player.setPlaying(false);
     }
-  } else {
+  } else if (!audio.paused) {
     audio.pause();
   }
 }
 
-function seek() {
-  if (audioEl.value) audioEl.value.currentTime = player.currentTime.value;
+function seek(event) {
+  if (!audioEl.value) return;
+  const value = Number(event.target.value);
+  if (!Number.isFinite(value)) return;
+  audioEl.value.currentTime = value;
+  player.setCurrentTime(value);
+}
+
+function setVolume(event) {
+  const value = Number(event.target.value);
+  player.setVolume(value);
+  if (audioEl.value) audioEl.value.volume = player.volume.value;
 }
 
 function onTimeUpdate() {
@@ -119,6 +147,8 @@ function onEnded() {
     });
     return;
   }
+
+  player.setPlaying(false);
   emit('next');
 }
 
@@ -150,6 +180,19 @@ watch(
 
 onMounted(() => {
   if (audioEl.value) audioEl.value.volume = player.volume.value;
+
+  commandWatcherStop = watch(
+    () => player.command.value,
+    (command) => {
+      if (command?.type !== 'seek' || !audioEl.value) return;
+      const value = Number(command.payload?.time);
+      if (Number.isFinite(value)) audioEl.value.currentTime = value;
+    }
+  );
+});
+
+onBeforeUnmount(() => {
+  commandWatcherStop?.();
 });
 
 function formatTime(seconds) {
