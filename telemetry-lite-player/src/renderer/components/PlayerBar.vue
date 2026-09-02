@@ -7,28 +7,28 @@
     </div>
 
     <div class="seek-row">
-      <span>{{ formatTime(currentTime) }}</span>
+      <span>{{ formatTime(player.currentTime.value) }}</span>
       <input
         type="range"
         class="form-range flex-grow-1"
         min="0"
-        :max="duration || 0"
+        :max="player.duration.value || 0"
         step="0.1"
-        v-model.number="currentTime"
+        :value="player.currentTime.value"
         @input="seek"
       />
-      <span>{{ formatTime(duration) }}</span>
+      <span>{{ formatTime(player.duration.value) }}</span>
     </div>
 
     <div class="transport-controls">
-      <button @click="toggleShuffle" :style="{ opacity: shuffle ? 1 : 0.4 }" title="Shuffle">🔀</button>
+      <button @click="toggleShuffle" :style="{ opacity: player.shuffle.value ? 1 : 0.4 }" title="Shuffle">🔀</button>
       <button @click="$emit('prev')" title="Previous">⏮</button>
       <button class="play-btn" @click="togglePlay" title="Play/Pause">
-        {{ isPlaying ? '⏸' : '▶️' }}
+        {{ player.isPlaying.value ? '⏸' : '▶️' }}
       </button>
       <button @click="$emit('next')" title="Next">⏭</button>
-      <button @click="cycleRepeat" :style="{ opacity: repeatMode !== 'off' ? 1 : 0.4 }" title="Repeat">
-        {{ repeatMode === 'one' ? '🔂' : '🔁' }}
+      <button @click="player.cycleRepeat()" :style="{ opacity: player.repeatMode.value !== 'off' ? 1 : 0.4 }" :title="`Repeat: ${player.repeatMode.value}`">
+        {{ player.repeatMode.value === 'one' ? '🔂' : '🔁' }}
       </button>
     </div>
 
@@ -41,7 +41,8 @@
         min="0"
         max="1"
         step="0.01"
-        v-model.number="volume"
+        :value="player.volume.value"
+        @input="setVolume"
       />
     </div>
 
@@ -50,95 +51,149 @@
       :src="track ? toFileUrl(track.path) : ''"
       @timeupdate="onTimeUpdate"
       @loadedmetadata="onLoadedMetadata"
+      @play="player.setPlaying(true)"
+      @pause="player.setPlaying(false)"
       @ended="onEnded"
+      @error="onError"
     ></audio>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue';
+import { ref, watch, onMounted, nextTick, onBeforeUnmount } from 'vue';
+import { usePlayerStore } from '../stores/playerStore';
 
 const props = defineProps({
   track: { type: Object, default: null },
   playlist: { type: Array, default: () => [] }
 });
 const emit = defineEmits(['next', 'prev']);
-
+const player = usePlayerStore();
 const audioEl = ref(null);
-const isPlaying = ref(false);
-const currentTime = ref(0);
-const duration = ref(0);
-const volume = ref(0.8);
-const shuffle = ref(false);
-const repeatMode = ref('off'); // 'off' | 'all' | 'one'
+let commandWatcherStop;
 
-function toFileUrl(path) {
-  // Convert a Windows/Unix absolute path to a file:// URL the <audio> tag can load
-  const normalized = path.replace(/\\/g, '/');
-  return `file://${normalized.startsWith('/') ? '' : '/'}${normalized}`;
+function toFileUrl(filePath) {
+  if (!filePath) return '';
+  const normalized = String(filePath).replace(/\\/g, '/');
+  const pathPart = normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)
+    ? normalized
+    : `/${normalized}`;
+  return `file://${encodeURI(pathPart)}`;
 }
 
-function togglePlay() {
-  if (!audioEl.value.src) return;
-  if (isPlaying.value) {
-    audioEl.value.pause();
-  } else {
-    audioEl.value.play();
+async function togglePlay() {
+  const audio = audioEl.value;
+  if (!audio || !props.track) return;
+
+  if (!audio.paused) {
+    audio.pause();
+    return;
   }
-  isPlaying.value = !isPlaying.value;
+
+  try {
+    await audio.play();
+  } catch (error) {
+    console.error('Unable to start playback:', error);
+    player.setPlaying(false);
+  }
 }
 
-function seek() {
-  audioEl.value.currentTime = currentTime.value;
+async function applyPlaybackState() {
+  await nextTick();
+  const audio = audioEl.value;
+  if (!audio || !props.track) return;
+
+  audio.volume = player.volume.value;
+  if (player.isPlaying.value) {
+    try {
+      await audio.play();
+    } catch (error) {
+      console.error('Unable to start playback:', error);
+      player.setPlaying(false);
+    }
+  } else if (!audio.paused) {
+    audio.pause();
+  }
+}
+
+function seek(event) {
+  if (!audioEl.value) return;
+  const value = Number(event.target.value);
+  if (!Number.isFinite(value)) return;
+  audioEl.value.currentTime = value;
+  player.setCurrentTime(value);
+}
+
+function setVolume(event) {
+  const value = Number(event.target.value);
+  player.setVolume(value);
+  if (audioEl.value) audioEl.value.volume = player.volume.value;
 }
 
 function onTimeUpdate() {
-  currentTime.value = audioEl.value.currentTime;
+  if (audioEl.value) player.setCurrentTime(audioEl.value.currentTime);
 }
 
 function onLoadedMetadata() {
-  duration.value = audioEl.value.duration;
+  if (audioEl.value) player.setDuration(audioEl.value.duration);
 }
 
 function onEnded() {
-  if (repeatMode.value === 'one') {
+  if (player.repeatMode.value === 'one') {
     audioEl.value.currentTime = 0;
-    audioEl.value.play();
+    audioEl.value.play().catch((error) => {
+      console.error('Unable to repeat track:', error);
+      player.setPlaying(false);
+    });
     return;
   }
+
+  player.setPlaying(false);
   emit('next');
 }
 
+function onError(event) {
+  console.error('Audio playback error:', event?.target?.error || event);
+  player.setPlaying(false);
+}
+
 function toggleShuffle() {
-  shuffle.value = !shuffle.value;
+  player.setShuffle(!player.shuffle.value);
 }
-
-function cycleRepeat() {
-  repeatMode.value =
-    repeatMode.value === 'off' ? 'all' : repeatMode.value === 'all' ? 'one' : 'off';
-}
-
-watch(volume, (v) => {
-  if (audioEl.value) audioEl.value.volume = v;
-});
 
 watch(
   () => props.track,
   async () => {
-    if (!props.track) return;
-    await nextTickPlay();
+    player.setCurrentTime(0);
+    player.setDuration(0);
+    await applyPlaybackState();
   }
 );
 
-async function nextTickPlay() {
-  // Wait for the src binding to update, then autoplay the new track
-  setTimeout(() => {
-    if (audioEl.value) {
-      audioEl.value.play();
-      isPlaying.value = true;
+watch(() => player.isPlaying.value, applyPlaybackState);
+watch(
+  () => player.volume.value,
+  (value) => {
+    if (audioEl.value) audioEl.value.volume = value;
+  }
+);
+
+onMounted(() => {
+  if (audioEl.value) audioEl.value.volume = player.volume.value;
+
+  commandWatcherStop = watch(
+    () => player.command.value,
+    (command) => {
+      if (command?.type !== 'seek' || !audioEl.value) return;
+      const value = Number(command.payload?.time);
+      if (Number.isFinite(value)) audioEl.value.currentTime = value;
     }
-  }, 50);
-}
+  );
+});
+
+onBeforeUnmount(() => {
+  commandWatcherStop?.();
+});
 
 function formatTime(seconds) {
   if (!seconds || Number.isNaN(seconds)) return '0:00';
@@ -148,8 +203,4 @@ function formatTime(seconds) {
     .padStart(2, '0');
   return `${m}:${s}`;
 }
-
-onMounted(() => {
-  if (audioEl.value) audioEl.value.volume = volume.value;
-});
 </script>

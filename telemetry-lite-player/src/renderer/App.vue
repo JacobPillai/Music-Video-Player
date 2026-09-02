@@ -26,7 +26,7 @@
         <PlayerView
           v-if="view === 'player'"
           :tracks="tracks"
-          :current-track="currentTrack"
+          :current-track="player.track"
           @select-track="playTrack"
         />
         <AutomationsView v-else :playlists="playlists" />
@@ -34,7 +34,7 @@
     </div>
 
     <PlayerBar
-      :track="currentTrack"
+      :track="player.track"
       :playlist="tracks"
       @next="playNext"
       @prev="playPrev"
@@ -43,37 +43,78 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import PlayerView from './components/PlayerView.vue';
 import PlayerBar from './components/PlayerBar.vue';
 import AutomationsView from './components/AutomationsView.vue';
+import { usePlayerStore } from './stores/playerStore';
 
+const player = usePlayerStore();
 const view = ref('player');
 const tracks = ref([]);
-const currentTrack = ref(null);
 const playlists = ref([]);
+
+const currentIndex = computed(() =>
+  player.track.value ? tracks.value.findIndex((t) => t.id === player.track.value.id) : -1
+);
 
 async function pickFolder() {
   const result = await window.api.pickFolder();
-  if (result) tracks.value = result.tracks;
+  if (!result) return;
+
+  tracks.value = result.tracks;
+  if (player.track.value && !tracks.value.some((t) => t.id === player.track.value.id)) {
+    player.selectTrack(null, { autoplay: false });
+  }
 }
 
 function playTrack(track) {
-  currentTrack.value = track;
+  player.selectTrack(track, { autoplay: true });
 }
 
 function playNext() {
-  if (!currentTrack.value || tracks.value.length === 0) return;
-  const idx = tracks.value.findIndex((t) => t.id === currentTrack.value.id);
-  const next = tracks.value[(idx + 1) % tracks.value.length];
-  currentTrack.value = next;
+  if (!player.track.value || tracks.value.length === 0 || currentIndex.value < 0) return;
+
+  let nextIndex;
+  if (player.shuffle.value && tracks.value.length > 1) {
+    const candidates = tracks.value
+      .map((_, index) => index)
+      .filter((index) => index !== currentIndex.value);
+    nextIndex = candidates[Math.floor(Math.random() * candidates.length)];
+  } else {
+    nextIndex = currentIndex.value + 1;
+  }
+
+  if (nextIndex >= tracks.value.length) {
+    if (player.repeatMode.value === 'all') {
+      nextIndex = 0;
+    } else {
+      player.pause();
+      return;
+    }
+  }
+
+  player.selectTrack(tracks.value[nextIndex], { autoplay: true });
 }
 
 function playPrev() {
-  if (!currentTrack.value || tracks.value.length === 0) return;
-  const idx = tracks.value.findIndex((t) => t.id === currentTrack.value.id);
-  const prev = tracks.value[(idx - 1 + tracks.value.length) % tracks.value.length];
-  currentTrack.value = prev;
+  if (!player.track.value || tracks.value.length === 0 || currentIndex.value < 0) return;
+
+  if (player.currentTime.value > 3) {
+    player.seekTo(0);
+    return;
+  }
+
+  let prevIndex = currentIndex.value - 1;
+  if (prevIndex < 0) {
+    if (player.repeatMode.value === 'all') {
+      prevIndex = tracks.value.length - 1;
+    } else {
+      prevIndex = 0;
+    }
+  }
+
+  player.selectTrack(tracks.value[prevIndex], { autoplay: player.isPlaying.value });
 }
 
 onMounted(async () => {
