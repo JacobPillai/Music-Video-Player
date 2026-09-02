@@ -15,6 +15,13 @@ contextBridge.exposeInMainWorld('api', {
 
   // System events (for automation triggers like lid close / resume)
   onSystemEvent: (callback) => {
-    ipcRenderer.on('system:event', (_event, eventName) => callback(eventName));
+    if (typeof callback !== 'function') return () => {};
+
+    const listener = (_event, eventName) => callback(eventName);
+    ipcRenderer.on('system:event', listener);
+
+    return () => {
+      ipcRenderer.off('system:event', listener);
+    };
   }
 });
