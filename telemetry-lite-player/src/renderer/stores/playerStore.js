@@ -18,7 +18,7 @@ export function usePlayerStore() {
     command.value = { id: Date.now() + Math.random(), type, payload };
   }
 
-  async function play() {
+  function play() {
     isPlaying.value = true;
     emitCommand('play');
   }
@@ -48,12 +48,18 @@ export function usePlayerStore() {
     currentTime.value = Number.isFinite(value) ? value : 0;
   }
 
+  function seekTo(value) {
+    setCurrentTime(value);
+    emitCommand('seek', { time: currentTime.value });
+  }
+
   function setDuration(value) {
     duration.value = Number.isFinite(value) ? value : 0;
   }
 
   function setVolume(value) {
-    volume.value = Math.max(0, Math.min(1, Number(value) || 0));
+    const next = Number(value);
+    volume.value = Number.isFinite(next) ? Math.max(0, Math.min(1, next)) : 0.8;
   }
 
   function setShuffle(value) {
@@ -87,6 +93,7 @@ export function usePlayerStore() {
     selectTrack,
     setPlaying,
     setCurrentTime,
+    seekTo,
     setDuration,
     setVolume,
     setShuffle,
