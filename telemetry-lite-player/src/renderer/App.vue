@@ -26,7 +26,7 @@
         <PlayerView
           v-if="view === 'player'"
           :tracks="tracks"
-          :current-track="currentTrack"
+          :current-track="player.track"
           @select-track="playTrack"
         />
         <AutomationsView v-else :playlists="playlists" />
@@ -34,7 +34,7 @@
     </div>
 
     <PlayerBar
-      :track="currentTrack"
+      :track="player.track"
       :playlist="tracks"
       @next="playNext"
       @prev="playPrev"
@@ -43,14 +43,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { onMounted, ref } from 'vue';
 import PlayerView from './components/PlayerView.vue';
 import PlayerBar from './components/PlayerBar.vue';
 import AutomationsView from './components/AutomationsView.vue';
+import { usePlayerStore } from './stores/playerStore';
 
+const player = usePlayerStore();
 const view = ref('player');
 const tracks = ref([]);
-const currentTrack = ref(null);
 const playlists = ref([]);
 
 async function pickFolder() {
@@ -59,21 +60,23 @@ async function pickFolder() {
 }
 
 function playTrack(track) {
-  currentTrack.value = track;
+  player.selectTrack(track, { autoplay: true });
 }
 
 function playNext() {
-  if (!currentTrack.value || tracks.value.length === 0) return;
-  const idx = tracks.value.findIndex((t) => t.id === currentTrack.value.id);
+  if (!player.track || tracks.value.length === 0) return;
+  const idx = tracks.value.findIndex((t) => t.id === player.track.id);
+  if (idx < 0) return;
   const next = tracks.value[(idx + 1) % tracks.value.length];
-  currentTrack.value = next;
+  player.selectTrack(next, { autoplay: player.isPlaying.value });
 }
 
 function playPrev() {
-  if (!currentTrack.value || tracks.value.length === 0) return;
-  const idx = tracks.value.findIndex((t) => t.id === currentTrack.value.id);
+  if (!player.track || tracks.value.length === 0) return;
+  const idx = tracks.value.findIndex((t) => t.id === player.track.id);
+  if (idx < 0) return;
   const prev = tracks.value[(idx - 1 + tracks.value.length) % tracks.value.length];
-  currentTrack.value = prev;
+  player.selectTrack(prev, { autoplay: player.isPlaying.value });
 }
 
 onMounted(async () => {
