@@ -102,11 +102,13 @@ const draft = ref({
 });
 
 const normalizedPlaylists = computed(() => (Array.isArray(props.playlists) ? props.playlists : []));
-const canAddRule = computed(() =>
-  draft.value.triggerType === 'schedule' && /^([01]\d|2[0-3]):[0-5]\d$/.test(draft.value.time)
-    ? draft.value.action !== 'playPlaylist' || Boolean(draft.value.playlistId)
-    : draft.value.triggerType === 'system' && Boolean(draft.value.systemEvent)
-);
+const canAddRule = computed(() => {
+  if (draft.value.triggerType === 'schedule') {
+    const validTime = /^([01]\d|2[0-3]):[0-5]\d$/.test(draft.value.time);
+    return validTime && (draft.value.action !== 'playPlaylist' || Boolean(draft.value.playlistId));
+  }
+  return draft.value.triggerType === 'system' && Boolean(draft.value.systemEvent);
+});
 
 const engine = createAutomationEngine({
   player,
@@ -116,7 +118,11 @@ const engine = createAutomationEngine({
 function addRule() {
   if (!canAddRule.value) return;
   rules.value.push({
-    ...draft.value,
+    triggerType: draft.value.triggerType,
+    time: draft.value.time,
+    systemEvent: draft.value.systemEvent,
+    action: draft.value.action,
+    playlistId: draft.value.playlistId,
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     enabled: true
   });
