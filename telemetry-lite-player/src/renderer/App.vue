@@ -26,7 +26,7 @@
         <PlayerView
           v-if="view === 'player'"
           :tracks="tracks"
-          :current-track="player.track"
+          :current-track="player.track.value"
           @select-track="playTrack"
         />
         <AutomationsView v-else :playlists="playlists" />
@@ -34,7 +34,7 @@
     </div>
 
     <PlayerBar
-      :track="player.track"
+      :track="player.track.value"
       :playlist="tracks"
       @next="playNext"
       @prev="playPrev"
@@ -72,26 +72,30 @@ function playTrack(track) {
   player.selectTrack(track, { autoplay: true });
 }
 
-function playNext() {
-  if (!player.track.value || tracks.value.length === 0 || currentIndex.value < 0) return;
+function chooseNextIndex() {
+  if (tracks.value.length <= 1) return currentIndex.value;
 
-  let nextIndex;
-  if (player.shuffle.value && tracks.value.length > 1) {
+  if (player.shuffle.value) {
     const candidates = tracks.value
       .map((_, index) => index)
       .filter((index) => index !== currentIndex.value);
-    nextIndex = candidates[Math.floor(Math.random() * candidates.length)];
-  } else {
-    nextIndex = currentIndex.value + 1;
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
+  return currentIndex.value + 1;
+}
+
+function playNext() {
+  if (!player.track.value || tracks.value.length === 0 || currentIndex.value < 0) return;
+
+  const nextIndex = chooseNextIndex();
   if (nextIndex >= tracks.value.length) {
-    if (player.repeatMode.value === 'all') {
-      nextIndex = 0;
-    } else {
+    if (player.repeatMode.value !== 'all') {
       player.pause();
       return;
     }
+    player.selectTrack(tracks.value[0], { autoplay: true });
+    return;
   }
 
   player.selectTrack(tracks.value[nextIndex], { autoplay: true });
@@ -107,11 +111,7 @@ function playPrev() {
 
   let prevIndex = currentIndex.value - 1;
   if (prevIndex < 0) {
-    if (player.repeatMode.value === 'all') {
-      prevIndex = tracks.value.length - 1;
-    } else {
-      prevIndex = 0;
-    }
+    prevIndex = player.repeatMode.value === 'all' ? tracks.value.length - 1 : 0;
   }
 
   player.selectTrack(tracks.value[prevIndex], { autoplay: player.isPlaying.value });
